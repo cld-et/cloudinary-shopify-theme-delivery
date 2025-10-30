@@ -1,0 +1,148 @@
+{%- liquid
+  # liquid-proxy-for-cloudinary
+  #
+  # This snippet accepts a block of HTML (`content`) and replaces Shopify CDN URLs
+  # for images and videos with their Cloudinary equivalents, based on global theme settings.
+  #
+  # @param content [String] The HTML content to process.
+  #
+  # @return [String] The processed HTML with Cloudinary URLs.
+
+  assign html_content = content
+  assign use_cloudinary = settings.optimize_with_cloudinary
+  
+  # Only process if Cloudinary is enabled and content is not blank.
+  if use_cloudinary and html_content != blank
+    # Retrieve global Cloudinary settings.
+    assign cld_img_prefix = settings.cloudinary_image_prefix
+    assign cld_vid_prefix = settings.cloudinary_video_prefix
+    assign cld_img_transform = settings.cloudinary_image_default_transformation
+    assign cld_vid_transform = settings.cloudinary_video_default_transformation
+
+    # Process the HTML line by line to find and replace URLs.
+    assign media_converted = ''
+    assign media_lines = html_content | split: '<'
+    for line in media_lines
+      assign processed_line = line
+
+      # Handle responsive images by parsing the `srcset` attribute.
+      if processed_line contains 'srcset="'
+        assign srcset_full_attr = 'srcset="' | append: processed_line | split: 'srcset="' | last
+        assign srcset_content = srcset_full_attr | split: '"' | first
+        assign srcset_items = srcset_content | split: ','
+
+        # Iterate through each URL in the srcset to convert it.
+        for item in srcset_items
+          assign trimmed_item = item | strip
+          assign url_and_descriptor = trimmed_item | split: ' '
+          assign original_url = url_and_descriptor[0]
+          
+          if original_url != blank
+            # --- Image URL conversion logic ---
+            assign converted_url = original_url
+            assign url_parts = original_url | split: '//' | last | split: '/'
+            
+            # Determine the correct path by skipping the domain and optional '/cdn/' segment.
+            assign first_path_segment = url_parts[1]
+            assign offset = 1
+            if first_path_segment == 'cdn'
+              assign offset = 2
+            endif
+
+            # Reconstruct the URL path.
+            capture url_path_segments
+              for part in url_parts offset: offset
+                echo part | append: '/'
+              endfor
+            endcapture
+            assign cdn_path_with_query = url_path_segments | strip_newlines | remove_last: '/'
+            
+            # Handle the special 's/files/{shop_id}/files/' URL structure by normalizing it.
+            if cdn_path_with_query contains 's/files/'
+              assign path_parts = cdn_path_with_query | split: '/files/'
+              assign filename_part = path_parts | last
+              assign cdn_path_with_query = 'shop/files/' | append: filename_part
+            endif
+            assign cdn_path = cdn_path_with_query | split: '?' | first
+            
+            # Extract width and version from query parameters to build transformations.
+            assign query_string = cdn_path_with_query | split: '?' | last
+            assign width_param = ''
+            assign version_param = ''
+            if query_string contains 'width='
+              assign width_val = query_string | split: 'width=' | last | split: '&' | first
+              assign width_param = '/c_limit,w_' | append: width_val
+            endif
+            if query_string contains 'v='
+              assign version_val = query_string | split: 'v=' | last | split: '&' | first
+              assign version_param = '/v' | append: version_val
+            endif
+            
+            # Construct the final Cloudinary URL.
+            assign converted_url = cld_img_prefix | append: cld_img_transform | append: width_param | append: version_param | append: '/' | append: cdn_path
+            # --- End Image URL conversion logic ---
+
+            # Replace the original URL in the HTML line.
+            assign processed_line = processed_line | replace: original_url, converted_url
+          endif
+        endfor
+
+      # Handle video tags and other elements using a single `src` attribute.
+      elsif processed_line contains 'src="'
+        assign src_full_attr = 'src="' | append: processed_line | split: 'src="' | last
+        assign original_url = src_full_attr | split: '"' | first
+        
+        if original_url != blank
+          assign converted_url = original_url
+
+          # Determine the correct path by skipping the domain and optional '/cdn/' segment.
+          assign url_parts = original_url | split: '//' | last | split: '/'
+          assign first_path_segment = url_parts[1]
+          assign offset = 1
+          if first_path_segment == 'cdn'
+            assign offset = 2
+          endif
+          capture url_path_segments
+            for part in url_parts offset: offset
+              echo part | append: '/'
+            endfor
+          endcapture
+          assign cdn_path_with_query = url_path_segments | strip_newlines | remove_last: '/'
+          
+          # Handle the special 's/files/{shop_id}/files/' URL structure by normalizing it.
+          if cdn_path_with_query contains 's/files/'
+            assign path_parts = cdn_path_with_query | split: '/files/'
+            assign filename_part = path_parts | last
+            assign cdn_path_with_query = 'shop/files/' | append: filename_part
+          endif
+          assign cdn_path = cdn_path_with_query | split: '?' | first
+          
+          # For videos, ensure the path includes the 'shop/' prefix.
+          if original_url contains '/cdn/shop/videos/' or original_url contains '/videos/'
+            assign final_cdn_path = cdn_path
+            assign path_prefix = cdn_path | slice: 0, 5
+            if path_prefix != 'shop/'
+              assign final_cdn_path = 'shop/' | append: cdn_path
+            endif
+            # Construct the final Cloudinary video URL.
+            assign converted_url = cld_vid_prefix | append: cld_vid_transform | append: '/' | append: final_cdn_path
+          endif
+
+          # Replace the original URL in the HTML line.
+          assign processed_line = processed_line | replace: original_url, converted_url
+        endif
+      endif
+
+      # Reconstruct the HTML content with the processed line.
+      if forloop.first == false
+        assign media_converted = media_converted | append: '<'
+      endif
+      assign media_converted = media_converted | append: processed_line
+    endfor
+    # Output the fully converted HTML.
+    echo media_converted
+  else
+    # If Cloudinary is disabled, return the original content.
+    echo html_content
+  endif
+-%}
