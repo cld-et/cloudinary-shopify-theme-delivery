@@ -30,12 +30,17 @@
         assign srcset_full_attr = 'srcset="' | append: processed_line | split: 'srcset="' | last
         assign srcset_content = srcset_full_attr | split: '"' | first
         assign srcset_items = srcset_content | split: ','
+        
+        # Build new srcset content to avoid substring replacement issues.
+        # (e.g., width=200 being a substring of width=2000)
+        assign new_srcset_content = ''
 
         # Iterate through each URL in the srcset to convert it.
         for item in srcset_items
           assign trimmed_item = item | strip
           assign url_and_descriptor = trimmed_item | split: ' '
           assign original_url = url_and_descriptor[0]
+          assign descriptor = url_and_descriptor[1]
           
           if original_url != blank
             # --- Image URL conversion logic ---
@@ -82,10 +87,17 @@
             assign converted_url = cld_img_prefix | append: cld_img_transform | append: width_param | append: version_param | append: '/' | append: cdn_path
             # --- End Image URL conversion logic ---
 
-            # Replace the original URL in the HTML line.
-            assign processed_line = processed_line | replace: original_url, converted_url
+            # Build the new srcset item with converted URL.
+            if forloop.first
+              assign new_srcset_content = converted_url | append: ' ' | append: descriptor
+            else
+              assign new_srcset_content = new_srcset_content | append: ', ' | append: converted_url | append: ' ' | append: descriptor
+            endif
           endif
         endfor
+        
+        # Replace the entire srcset content at once to avoid substring collisions.
+        assign processed_line = processed_line | replace: srcset_content, new_srcset_content
 
       # Handle video tags and other elements using a single `src` attribute.
       elsif processed_line contains 'src="'
