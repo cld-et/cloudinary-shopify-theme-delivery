@@ -2309,13 +2309,13 @@
       {
         "type": "text",
         "id": "cloudinary_image_default_transformation",
-        "default": "f_auto,q_auto",
+        "default": "c_limit,f_auto,q_auto",
         "label": "Cloudinary image transformation"
       },
             {
         "type": "text",
         "id": "cloudinary_video_default_transformation",
-        "default": "f_auto,q_auto",
+        "default": "ac_none,c_limit,f_auto,q_auto",
         "label": "Cloudinary image transformation"
       }
     ]
