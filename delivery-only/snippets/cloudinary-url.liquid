@@ -136,8 +136,32 @@
             if path_prefix != 'shop/'
               assign final_cdn_path = 'shop/' | append: cdn_path
             endif
+            
+            assign video_height_transform = ''
+            
+            # Handle the special video URL format: /c/vp/{id}/{id}.HD-1080p-3.3Mbps-xxxxx.mp4
+            # Convert to: /c/o/v/{id}.mp4 and extract height for transformation
+            if final_cdn_path contains '/c/vp/'
+              # Extract the video ID (folder name after vp/)
+              assign vp_parts = final_cdn_path | split: '/c/vp/'
+              assign vp_prefix = vp_parts | first
+              assign vp_rest = vp_parts | last
+              assign video_id = vp_rest | split: '/' | first
+              
+              # Extract resolution from filename (e.g., HD-1080p -> 1080)
+              assign filename_part = vp_rest | split: '/' | last
+              if filename_part contains 'p-'
+                assign resolution_parts = filename_part | split: 'p-' | first
+                assign resolution = resolution_parts | split: '-' | last
+                assign video_height_transform = '/h_' | append: resolution
+              endif
+              
+              # Reconstruct path: {prefix}/c/o/v/{id}.mp4
+              assign final_cdn_path = vp_prefix | append: '/c/o/v/' | append: video_id | append: '.mp4'
+            endif
+            
             # Construct the final Cloudinary video URL.
-            assign converted_url = cld_vid_prefix | append: cld_vid_transform | append: '/' | append: final_cdn_path
+            assign converted_url = cld_vid_prefix | append: cld_vid_transform | append: video_height_transform | append: '/' | append: final_cdn_path
           endif
 
           # Replace the original URL in the HTML line.
