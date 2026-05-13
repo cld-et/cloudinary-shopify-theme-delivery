@@ -1,0 +1,217 @@
+{%- liquid
+  # cloudinary-synced-url — product imagery / folder sync
+  #
+  # Maps Shopify CDN image/video URLs to Cloudinary using theme prefix + path (synced folder).
+  # Skips filenames that look like AssetLink (`cloudinary__...`) and non-Shopify CDN URLs.
+  #
+  # Use this for product cards, PDP media, etc. For AssetLink-linked theme filenames,
+  # use `cloudinary-assetlink-url` instead.
+  #
+  # @param content [String] HTML to process.
+
+  assign html_content = content
+  assign use_cloudinary = settings.optimize_with_cloudinary
+
+  if use_cloudinary and html_content != blank
+    assign cld_img_prefix = settings.cloudinary_image_prefix
+    assign cld_vid_prefix = settings.cloudinary_video_prefix
+    assign cld_img_transform = settings.cloudinary_image_default_transformation
+    assign cld_vid_transform = settings.cloudinary_video_default_transformation
+
+    assign media_converted = ''
+    assign media_lines = html_content | split: '<'
+    for line in media_lines
+      assign processed_line = line
+
+      if processed_line contains 'srcset="'
+        assign srcset_full_attr = 'srcset="' | append: processed_line | split: 'srcset="' | last
+        assign srcset_content = srcset_full_attr | split: '"' | first
+        assign srcset_items = srcset_content | split: ','
+        assign new_srcset_content = ''
+
+        for item in srcset_items
+          assign trimmed_item = item | strip
+          assign url_and_descriptor = trimmed_item | split: ' '
+          assign original_url = url_and_descriptor[0]
+          assign descriptor = url_and_descriptor[1]
+
+          if original_url != blank
+            assign converted_url = original_url
+            assign url_protocol_relative = false
+            assign url_lead2 = original_url | slice: 0, 2
+            if url_lead2 == '//'
+              assign url_protocol_relative = true
+            endif
+
+            assign url_parts = original_url | split: '//' | last | split: '/'
+            assign first_path_segment = url_parts[1]
+            assign offset = 1
+            if first_path_segment == 'cdn'
+              assign offset = 2
+            endif
+
+            capture url_path_segments
+              for part in url_parts offset: offset
+                echo part | append: '/'
+              endfor
+            endcapture
+            assign cdn_path_with_query = url_path_segments | strip_newlines | remove_last: '/'
+
+            if cdn_path_with_query contains 's/files/'
+              assign path_parts = cdn_path_with_query | split: '/files/'
+              assign filename_part = path_parts | last
+              assign cdn_path_with_query = 'shop/files/' | append: filename_part
+            endif
+            assign cdn_path = cdn_path_with_query | split: '?' | first
+
+            assign query_string = cdn_path_with_query | split: '?' | last
+            assign width_param = ''
+            assign version_param = ''
+            if query_string contains 'width='
+              assign width_val = query_string | split: 'width=' | last | split: '&' | first
+              assign width_param = '/c_limit,w_' | append: width_val
+            endif
+            if query_string contains 'v='
+              assign version_val = query_string | split: 'v=' | last | split: '&' | first
+              assign version_param = '/v' | append: version_val
+            endif
+
+            assign image_filename = cdn_path | split: '/' | last
+            assign is_shopify_cdn = false
+            if original_url contains '/cdn/shop/' or original_url contains 'cdn.shopify.com' or original_url contains '/s/files/'
+              assign is_shopify_cdn = true
+            endif
+
+            assign should_apply_folder_sync = false
+            if is_shopify_cdn
+              unless image_filename contains 'cloudinary__'
+                assign should_apply_folder_sync = true
+              endunless
+            endif
+
+            if should_apply_folder_sync
+              if settings.cloudinary_alternative_cdn_path != blank
+                assign cdn_path = cdn_path | replace_first: 'shop/files', settings.cloudinary_alternative_cdn_path
+              endif
+              assign converted_url = cld_img_prefix | append: cld_img_transform | append: width_param | append: version_param | append: '/' | append: cdn_path
+              if url_protocol_relative
+                assign converted_url = converted_url | replace_first: 'https://', '' | replace_first: 'http://', ''
+                assign conv_lead2 = converted_url | slice: 0, 2
+                if conv_lead2 != '//'
+                  assign converted_url = '//' | append: converted_url
+                endif
+              endif
+            endif
+
+            if forloop.first
+              assign new_srcset_content = converted_url | append: ' ' | append: descriptor
+            else
+              assign new_srcset_content = new_srcset_content | append: ', ' | append: converted_url | append: ' ' | append: descriptor
+            endif
+          endif
+        endfor
+
+        assign processed_line = processed_line | replace: srcset_content, new_srcset_content
+
+      elsif processed_line contains 'src="'
+        assign src_full_attr = 'src="' | append: processed_line | split: 'src="' | last
+        assign original_url = src_full_attr | split: '"' | first
+
+        if original_url != blank
+          assign converted_url = original_url
+          assign url_protocol_relative = false
+          assign url_lead2 = original_url | slice: 0, 2
+          if url_lead2 == '//'
+            assign url_protocol_relative = true
+          endif
+
+          assign url_parts = original_url | split: '//' | last | split: '/'
+          assign first_path_segment = url_parts[1]
+          assign offset = 1
+          if first_path_segment == 'cdn'
+            assign offset = 2
+          endif
+          capture url_path_segments
+            for part in url_parts offset: offset
+              echo part | append: '/'
+            endfor
+          endcapture
+          assign cdn_path_with_query = url_path_segments | strip_newlines | remove_last: '/'
+
+          if cdn_path_with_query contains 's/files/'
+            assign path_parts = cdn_path_with_query | split: '/files/'
+            assign filename_part = path_parts | last
+            assign cdn_path_with_query = 'shop/files/' | append: filename_part
+          endif
+          assign cdn_path = cdn_path_with_query | split: '?' | first
+
+          assign query_string = cdn_path_with_query | split: '?' | last
+          assign width_param = ''
+          assign version_param = ''
+          if query_string contains 'width='
+            assign width_val = query_string | split: 'width=' | last | split: '&' | first
+            assign width_param = '/c_limit,w_' | append: width_val
+          endif
+          if query_string contains 'v='
+            assign version_val = query_string | split: 'v=' | last | split: '&' | first
+            assign version_param = '/v' | append: version_val
+          endif
+
+          assign image_filename = cdn_path | split: '/' | last
+          assign is_shopify_cdn = false
+          if original_url contains '/cdn/shop/' or original_url contains 'cdn.shopify.com' or original_url contains '/s/files/' or original_url contains '/cdn/shop/videos/' or original_url contains '/videos/'
+            assign is_shopify_cdn = true
+          endif
+
+          if is_shopify_cdn
+            unless image_filename contains 'cloudinary__'
+              if original_url contains '/cdn/shop/videos/' or original_url contains '/videos/'
+                assign final_cdn_path = cdn_path
+                assign path_prefix = cdn_path | slice: 0, 5
+                if path_prefix != 'shop/'
+                  assign final_cdn_path = 'shop/' | append: cdn_path
+                endif
+
+                assign video_height_transform = ''
+
+                if final_cdn_path contains '/c/vp/'
+                  assign vp_parts = final_cdn_path | split: '/c/vp/'
+                  assign vp_prefix = vp_parts | first
+                  assign vp_rest = vp_parts | last
+                  assign video_id = vp_rest | split: '/' | first
+
+                  assign filename_part = vp_rest | split: '/' | last
+                  if filename_part contains 'p-'
+                    assign resolution_parts = filename_part | split: 'p-' | first
+                    assign resolution = resolution_parts | split: '-' | last
+                    assign video_height_transform = '/h_' | append: resolution
+                  endif
+
+                  assign final_cdn_path = vp_prefix | append: '/c/o/v/' | append: video_id | append: '.mp4'
+                endif
+
+                assign converted_url = cld_vid_prefix | append: cld_vid_transform | append: video_height_transform | append: '/' | append: final_cdn_path
+                if url_protocol_relative
+                  assign converted_url = converted_url | replace_first: 'https://', '' | replace_first: 'http://', ''
+                  assign conv_lead2 = converted_url | slice: 0, 2
+                  if conv_lead2 != '//'
+                    assign converted_url = '//' | append: converted_url
+                  endif
+                endif
+                assign processed_line = processed_line | replace: original_url, converted_url
+              endif
+            endunless
+          endif
+        endif
+      endif
+
+      if forloop.first == false
+        assign media_converted = media_converted | append: '<'
+      endif
+      assign media_converted = media_converted | append: processed_line
+    endfor
+    echo media_converted
+  else
+    echo html_content
+  endif
+-%}

@@ -1,0 +1,37 @@
+[
+  {
+    "name": "Cloudinary Image and Video",
+    "settings": [
+      {
+        "type": "checkbox",
+        "id": "optimize_with_cloudinary",
+        "default": true,
+        "label": "Optimize images and videos with Cloudinary"
+      },
+      {
+        "type": "text",
+        "id": "cloudinary_image_prefix",
+        "default": "https://res.cloudinary.com/cloudname/image/upload/",
+        "label": "Cloudinary image prefix"
+      },      
+      {
+        "type": "text",
+        "id": "cloudinary_video_prefix",
+        "default": "https://res.cloudinary.com/cloudname/video/upload/",
+        "label": "Cloudinary video prefix"
+      },
+      {
+        "type": "text",
+        "id": "cloudinary_image_default_transformation",
+        "default": "c_limit,f_auto,q_auto",
+        "label": "Cloudinary image transformation"
+      },
+            {
+        "type": "text",
+        "id": "cloudinary_video_default_transformation",
+        "default": "ac_none,c_limit,f_auto,q_auto",
+        "label": "Cloudinary image transformation"
+      }
+    ]
+  }
+]

@@ -1,0 +1,236 @@
+{%- liquid
+  # cloudinary-assetlink-url — theme / general use
+  #
+  # Replaces Shopify CDN URLs whose *filename* matches AssetLink:
+  # cloudinary__CLOUDNAME__image__upload__...__PUBLIC_ID__...__cld.ext
+  #
+  # Use this for theme images (sections, etc.). For product imagery synced as a folder
+  # to Cloudinary, use `cloudinary-synced-url` instead.
+  #
+  # @param content [String] HTML to process.
+
+  assign html_content = content
+  assign use_cloudinary = settings.optimize_with_cloudinary
+
+  if use_cloudinary and html_content != blank
+    assign cld_img_transform = settings.cloudinary_image_default_transformation
+
+    assign media_converted = ''
+    assign media_lines = html_content | split: '<'
+    for line in media_lines
+      assign processed_line = line
+
+      if processed_line contains 'srcset="'
+        assign srcset_full_attr = 'srcset="' | append: processed_line | split: 'srcset="' | last
+        assign srcset_content = srcset_full_attr | split: '"' | first
+        assign srcset_items = srcset_content | split: ','
+        assign new_srcset_content = ''
+
+        for item in srcset_items
+          assign trimmed_item = item | strip
+          assign url_and_descriptor = trimmed_item | split: ' '
+          assign original_url = url_and_descriptor[0]
+          assign descriptor = url_and_descriptor[1]
+
+          if original_url != blank
+            assign converted_url = original_url
+            assign url_protocol_relative = false
+            assign url_lead2 = original_url | slice: 0, 2
+            if url_lead2 == '//'
+              assign url_protocol_relative = true
+            endif
+
+            assign url_parts = original_url | split: '//' | last | split: '/'
+            assign first_path_segment = url_parts[1]
+            assign offset = 1
+            if first_path_segment == 'cdn'
+              assign offset = 2
+            endif
+
+            capture url_path_segments
+              for part in url_parts offset: offset
+                echo part | append: '/'
+              endfor
+            endcapture
+            assign cdn_path_with_query = url_path_segments | strip_newlines | remove_last: '/'
+
+            if cdn_path_with_query contains 's/files/'
+              assign path_parts = cdn_path_with_query | split: '/files/'
+              assign filename_part = path_parts | last
+              assign cdn_path_with_query = 'shop/files/' | append: filename_part
+            endif
+            assign cdn_path = cdn_path_with_query | split: '?' | first
+
+            assign query_string = cdn_path_with_query | split: '?' | last
+            assign width_param = ''
+            assign version_param = ''
+            if query_string contains 'width='
+              assign width_val = query_string | split: 'width=' | last | split: '&' | first
+              assign width_param = '/c_limit,w_' | append: width_val
+            endif
+            if query_string contains 'v='
+              assign version_val = query_string | split: 'v=' | last | split: '&' | first
+              assign version_param = '/v' | append: version_val
+            endif
+
+            assign image_filename = cdn_path | split: '/' | last
+            if image_filename contains 'cloudinary__'
+              assign filename_parts = image_filename | split: '__'
+              assign cloudname = filename_parts[1]
+              assign cloudinary_host = settings.cloudinary_hostname | default: ''
+              if cloudinary_host == blank
+                assign cloudinary_host = 'https://res.cloudinary.com' | append: '/' | append: cloudname
+              elsif cloudinary_host contains 'res.cloudinary.com'
+                assign cloudinary_host = cloudinary_host | append: '/' | append: cloudname
+              endif
+              assign upload_index = 0
+              assign cld_index = 0
+              for fp in filename_parts
+                if fp == 'upload'
+                  assign upload_index = forloop.index0
+                endif
+                if fp contains 'cld'
+                  assign cld_index = forloop.index0
+                endif
+              endfor
+              assign public_id_parts = ''
+              for fp in filename_parts
+                if forloop.index0 > upload_index and forloop.index0 < cld_index
+                  if public_id_parts == ''
+                    assign public_id_parts = fp
+                  else
+                    assign public_id_parts = public_id_parts | append: '__' | append: fp
+                  endif
+                endif
+              endfor
+              assign public_id = public_id_parts
+              if public_id == blank
+                assign public_id = filename_parts[4]
+              endif
+              assign public_id = public_id | replace: '-_p-', '%'
+              assign file_ext = image_filename | split: '.' | last
+              assign assetlink_transforms = settings.cloudinary_plp_transformations | default: cld_img_transform | default: 'c_lfill,f_auto,q_auto'
+              assign converted_url = cloudinary_host | append: '/image/upload/' | append: assetlink_transforms | append: width_param | append: version_param | append: '/' | append: public_id | append: '.' | append: file_ext
+              if url_protocol_relative
+                assign converted_url = converted_url | replace_first: 'https://', '' | replace_first: 'http://', ''
+                assign conv_lead2 = converted_url | slice: 0, 2
+                if conv_lead2 != '//'
+                  assign converted_url = '//' | append: converted_url
+                endif
+              endif
+            endif
+
+            if forloop.first
+              assign new_srcset_content = converted_url | append: ' ' | append: descriptor
+            else
+              assign new_srcset_content = new_srcset_content | append: ', ' | append: converted_url | append: ' ' | append: descriptor
+            endif
+          endif
+        endfor
+
+        assign processed_line = processed_line | replace: srcset_content, new_srcset_content
+
+      elsif processed_line contains 'src="'
+        assign src_full_attr = 'src="' | append: processed_line | split: 'src="' | last
+        assign original_url = src_full_attr | split: '"' | first
+
+        if original_url != blank
+          assign converted_url = original_url
+          assign url_protocol_relative = false
+          assign url_lead2 = original_url | slice: 0, 2
+          if url_lead2 == '//'
+            assign url_protocol_relative = true
+          endif
+
+          assign url_parts = original_url | split: '//' | last | split: '/'
+          assign first_path_segment = url_parts[1]
+          assign offset = 1
+          if first_path_segment == 'cdn'
+            assign offset = 2
+          endif
+          capture url_path_segments
+            for part in url_parts offset: offset
+              echo part | append: '/'
+            endfor
+          endcapture
+          assign cdn_path_with_query = url_path_segments | strip_newlines | remove_last: '/'
+
+          if cdn_path_with_query contains 's/files/'
+            assign path_parts = cdn_path_with_query | split: '/files/'
+            assign filename_part = path_parts | last
+            assign cdn_path_with_query = 'shop/files/' | append: filename_part
+          endif
+          assign cdn_path = cdn_path_with_query | split: '?' | first
+
+          assign query_string = cdn_path_with_query | split: '?' | last
+          assign width_param = ''
+          assign version_param = ''
+          if query_string contains 'width='
+            assign width_val = query_string | split: 'width=' | last | split: '&' | first
+            assign width_param = '/c_limit,w_' | append: width_val
+          endif
+          if query_string contains 'v='
+            assign version_val = query_string | split: 'v=' | last | split: '&' | first
+            assign version_param = '/v' | append: version_val
+          endif
+
+          assign image_filename = cdn_path | split: '/' | last
+          if image_filename contains 'cloudinary__'
+            assign filename_parts = image_filename | split: '__'
+            assign cloudname = filename_parts[1]
+            assign cloudinary_host = settings.cloudinary_hostname | default: ''
+            if cloudinary_host == blank
+              assign cloudinary_host = 'https://res.cloudinary.com' | append: '/' | append: cloudname
+            elsif cloudinary_host contains 'res.cloudinary.com'
+              assign cloudinary_host = cloudinary_host | append: '/' | append: cloudname
+            endif
+            assign upload_index = 0
+            assign cld_index = 0
+            for fp in filename_parts
+              if fp == 'upload'
+                assign upload_index = forloop.index0
+              endif
+              if fp contains 'cld'
+                assign cld_index = forloop.index0
+              endif
+            endfor
+            assign public_id_parts = ''
+            for fp in filename_parts
+              if forloop.index0 > upload_index and forloop.index0 < cld_index
+                if public_id_parts == ''
+                  assign public_id_parts = fp
+                else
+                  assign public_id_parts = public_id_parts | append: '__' | append: fp
+                endif
+              endif
+            endfor
+            assign public_id = public_id_parts
+            if public_id == blank
+              assign public_id = filename_parts[4]
+            endif
+            assign public_id = public_id | replace: '-_p-', '%'
+            assign file_ext = image_filename | split: '.' | last
+            assign assetlink_transforms = settings.cloudinary_plp_transformations | default: cld_img_transform | default: 'c_lfill,f_auto,q_auto'
+            assign converted_url = cloudinary_host | append: '/image/upload/' | append: assetlink_transforms | append: width_param | append: version_param | append: '/' | append: public_id | append: '.' | append: file_ext
+            if url_protocol_relative
+              assign converted_url = converted_url | replace_first: 'https://', '' | replace_first: 'http://', ''
+              assign conv_lead2 = converted_url | slice: 0, 2
+              if conv_lead2 != '//'
+                assign converted_url = '//' | append: converted_url
+              endif
+            endif
+            assign processed_line = processed_line | replace: original_url, converted_url
+          endif
+        endif
+      endif
+
+      if forloop.first == false
+        assign media_converted = media_converted | append: '<'
+      endif
+      assign media_converted = media_converted | append: processed_line
+    endfor
+    echo media_converted
+  else
+    echo html_content
+  endif
+-%}
